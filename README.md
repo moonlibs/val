@@ -4,7 +4,7 @@ This is very fast validator with abilities to perform complex cascade inplace st
 
 ## Usage
 
-```
+```lua
 local val = require 'val'
 
 local structure_validator = val.idator({
