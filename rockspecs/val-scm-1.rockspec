@@ -1,7 +1,7 @@
 package = 'val'
 version = 'scm-1'
 source  = {
-    url    = 'git://github.com/okoshovetc/config.git',
+    url    = 'git://github.com/moonlibs/val.git',
     branch = 'master',
 }
 description = {
