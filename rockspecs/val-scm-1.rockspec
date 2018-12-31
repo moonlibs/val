@@ -3,7 +3,8 @@ version = 'scm-1'
 source  = {
     url    = 'git://github.com/moonlibs/val.git',
     branch = 'master',
-    tag    = 'v1.0',
+    -- luarocks seems to treat tag as an alias for "branch" which seems stupid
+    -- tag    = 'v1.1',
 }
 description = {
     summary  = "Package for complex structure validation and transformation",
