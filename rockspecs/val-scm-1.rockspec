@@ -3,6 +3,7 @@ version = 'scm-1'
 source  = {
     url    = 'git://github.com/moonlibs/val.git',
     branch = 'master',
+    tag    = 'v1.0',
 }
 description = {
     summary  = "Package for complex structure validation and transformation",
