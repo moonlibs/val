@@ -106,12 +106,19 @@ local function validator(schema, prefix, lines, funcs)
 				do
 					local _currcast = 0
 			]], key, key))
-			if required then
-				table.insert(lines, string.format([[
+			table.insert(lines, string.format([[
 					if %s == nil then
+			]], key))
+			if required then
+				table.insert(lines, [[
 						error{ 'missing' }
 					end
-				]],key))
+				]])
+			else
+				table.insert(lines, [[
+					--skip
+					else
+				]])
 			end
 
 			for _, rule in pairs(checktype) do
@@ -138,6 +145,11 @@ local function validator(schema, prefix, lines, funcs)
 					_currcast = nil
 				end
 			]]))
+			if not required then
+				table.insert(lines, [[
+				end
+				]])
+			end
 		end
 		
 		generic_check = function(rule)
@@ -313,6 +325,14 @@ function M.optional(...)
 end
 M.opt   = M.optional
 M.maybe = M.optional
+
+-- lua's tonumber can take optional second parameter
+-- so it does not work with our functions taking (value, key) as arguments
+function M.tonumber(value)
+	return tonumber(value)
+end
+M.number = M.tonumber
+M.num    = M.tonumber
 
 return setmetatable(M,{
 	__call = function(_,...) return _.idator(...) end

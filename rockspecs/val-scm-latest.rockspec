@@ -1,5 +1,5 @@
 package = 'val'
-version = 'scm-1'
+version = 'scm-1.1'
 source  = {
     url    = 'git://github.com/moonlibs/val.git',
     branch = 'master',

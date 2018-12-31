@@ -297,6 +297,54 @@ v_test_not_ok(
 	"required function nested negative: cascade with changing type"
 )
 
+v_test_ok(
+	val(
+		{ test = val.opt('table', { nest_str = '+string', nest_num = '+number' }) }
+	),
+	{},
+	"optional nested table positive: missing table"
+)
+
+v_test_ok(
+	val(
+		{ test = val.opt('table', { nest_str = '+string', nest_num = '+number' }) }
+	),
+	{ test = { nest_str = 'str', nest_num = 1 } },
+	"optional nested table positive: correct table"
+)
+
+v_test_not_ok(
+	val(
+		{ test = val.opt('table', { nest_str = '+string', nest_num = '+number' }) }
+	),
+	{ test = { nest_str = 'str', nest_num = 'str' } },
+	function(e)
+		return e:match("test%.nest_num") and e:match("invalid") and e:match("expected number")
+	end,
+	"optional nested table negative: invalid value"
+)
+
+v_test_not_ok(
+	val(
+		{ test = val.opt('table', { nest_str = '+string', nest_num = '+number' }) }
+	),
+	{ test = { nest_str = 'str' } },
+	function(e)
+		return e:match("test%.nest_num") and e:match("missing")
+	end,
+	"optional nested table negative: missing value"
+)
+
+local test_table = {}
+v_test_ok(
+	val(
+		{ test = val.opt(tostring) }
+	),
+	test_table,
+	"optional casts positive"
+)
+ok(test_table.test == nil, "no rudimentary leftovers")
+
 local json = require 'json'
 
 local custom_handler = function(key_check, value_check, error_check, name)
