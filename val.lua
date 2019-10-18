@@ -206,20 +206,14 @@ end
 function M.validator(schema,handlers)
 	-- print(yaml.encode(schema))
 	local prefix = 'args'
-	local lines = { "return function("..prefix..")",[[
+	local lines = {
+		[[
 		local _currkey,_currval,_currcast
 		-- print("xpcall to validator function")
 		local function _typename(value)
 			return type(value) ~= 'cdata' and type(value) or tostring(require"ffi".typeof(value))
 		end
-		local r,e = xpcall(function()
-	]] }
-	lines.top = {}
-	local funcs = {}
-	handlers = handlers or {}
-	validator(schema, prefix, lines, funcs)
-	table.insert(lines,[[
-		end,function(err) -- catch of xpcall
+		local function _err_handler(err) -- catch of xpcall
 			-- print("in xpcall error",yaml.encode(err), _currkey, _currval)
 			if type(err) == 'table' and err[1] then
 				if handlers.handler then
@@ -256,11 +250,22 @@ function M.validator(schema,handlers)
 				end
 			end
 			return err
-		end,args)
+		end
+
+		local function _main_checker(args)
+		]],
+	}
+	lines.top = {}
+	local funcs = {}
+	handlers = handlers or {}
+	validator(schema, prefix, lines, funcs)
+	table.insert(lines,"return "..prefix.." end")
+	table.insert(lines, "return function("..prefix..[[)
+		local r,e = xpcall(_main_checker, _err_handler,args)
 		-- print("xpcall return = ",r,yaml.encode(e))
 		if not r then error(e,2) end
-	]])
-	table.insert(lines,"return "..prefix.." end")
+		return args
+	end ]])
 	for k,v in pairs(lines.top) do
 		table.insert(lines,1,v)
 	end
