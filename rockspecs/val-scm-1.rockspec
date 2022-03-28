@@ -1,7 +1,7 @@
 package = 'val'
 version = 'scm-1'
 source  = {
-    url    = 'git://github.com/moonlibs/val.git',
+    url    = 'git+https://github.com/moonlibs/val.git',
     branch = 'master',
     -- luarocks seems to treat tag as an alias for "branch" which seems stupid
     -- tag    = 'v1.1',
