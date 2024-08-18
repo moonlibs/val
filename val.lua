@@ -2,8 +2,9 @@ local M = {}
 
 local REQ_MULTICAST_MT = {}
 local OPT_MULTICAST_MT = {}
+local COM_MULTICAST_MT = {}
 
-local function validator(schema, prefix, lines, funcs)
+local function build_validator(schema, prefix, lines, funcs, handlers)
 	for k,rule in pairs(schema) do
 		local key, name
 		if type(k) == 'string' then
@@ -76,13 +77,13 @@ local function validator(schema, prefix, lines, funcs)
 						error{ 'invalid', string.format("got %%s, expected %%s"..( _currcast and string.format(" (after %%d cast)",_currcast) or "" ), _typename(%s), '%s') }
 					end
 				]],key,'cdata',key,checktype))
-				
+
 				table.insert(lines, string.format([[
 						if tostring(ffi.typeof(%s)) ~= '%s' then
 							error{ 'invalid', string.format("got %%s, expected %%s"..( _currcast and string.format(" (after %%d cast)",_currcast) or "" ), _typename(%s), '%s') }
 						end
 				]],key,checktype,key,checktype))
-				
+
 			if required then
 			else
 				table.insert(lines, string.format([[
@@ -92,11 +93,6 @@ local function validator(schema, prefix, lines, funcs)
 
 		end
 
-		local function array_check(checktype)
-			-- table.insert(checks, 1, "local ffi = require 'ffi'")
-			-- table.insert(checks, string.format("assert(tostring(ffi.typeof(%s)) == '%s','%s required to be of type %s')",key,ffitype,key,ffitype))
-		end
-		
 		local generic_check -- function
 
 		local function cast_check(checktype, required)
@@ -128,16 +124,13 @@ local function validator(schema, prefix, lines, funcs)
 						_currcast = _currcast + 1
 						%s = funcs[%s](%s, '%s')
 					]], key, #funcs, key, key))
-					
+
 					table.insert(lines, string.format([[
 						if %s == nil then
 							error{ 'invalid', string.format("got no value after %%d cast", _currcast) }
 						end
 					]], key, #funcs, key, key))
 				else
-					table.insert(lines, string.format([[
-						-- TODO: type check %s
-					]], rule))
 					generic_check(rule)
 				end
 			end
@@ -151,7 +144,7 @@ local function validator(schema, prefix, lines, funcs)
 				]])
 			end
 		end
-		
+
 		generic_check = function(rule)
 			if type(rule) == 'string' then
 				rule = rule
@@ -169,31 +162,49 @@ local function validator(schema, prefix, lines, funcs)
 					required = true
 					luatype = rule
 				end
-				
-				-- print(required,luatype)
-				
+
 				if luatype:match('^ctype') then
-					-- common_check('cdata',required)
 					cdata_check(luatype, required)
 				else
 					common_check(luatype,required)
 				end
 			elseif type(rule) == 'function' then
-				-- table.insert(funcs,rule)
-				-- 	table.insert(checks, string.format("callbacks[%s](%s, '%s')", #callbacks, key, key))
 				cast_check({ rule }, true)
 			elseif type(rule) == 'table' then
 				local mt = getmetatable(rule)
-				if mt and (mt == REQ_MULTICAST_MT or mt == OPT_MULTICAST_MT) then
+				if mt == REQ_MULTICAST_MT or mt == OPT_MULTICAST_MT then
 					cast_check(rule,mt == REQ_MULTICAST_MT)
+				elseif mt == COM_MULTICAST_MT then
+					local leaf_validator = M.validator(rule[1], { handler = function(n, value, err)
+						error({ err[1], err[2], n, value })
+					end})
+
+					local list_validator = function(value, pref)
+						if type(value) ~= 'table' then
+							error{ 'invalid', "got "..type(value).. ", expected table" }
+						end
+						local last = 0
+						for i, item in pairs(value) do
+							if type(i) ~= 'number' then
+								error{ 'invalid', ("table %s expected to be list but got %s[%s]"):format(pref, pref, i), }
+							end
+							if i ~= last + 1 then
+								error{ 'invalid', ("list %s must be consecutive but got whole in %s[%s]"):format(pref, pref, last+1), }
+							end
+							local ok, err = pcall(leaf_validator, item)
+							if ok then
+								value[i] = err
+							else
+								error({ err[1], err[2], (err[3]:gsub('args%.', pref ..'['..i..'].')) })
+							end
+						end
+						return value
+					end
+					cast_check({ list_validator }, false)
 				else
 					common_check('table',true)
-					validator(rule,prefix..'.'..k, lines, funcs)
+					build_validator(rule,key, lines, funcs, handlers)
 				end
-			-- 	-- it's a type
-			-- 	common_check('table')
-			-- 	if type(rule) == 'table' then
-			-- 	end
 			else
 				error("Not supported check type for "..k..": "..type(rule),2)
 				error(string.format("Not supported check type for %s: %s", key, type(rule)),2)
@@ -203,18 +214,19 @@ local function validator(schema, prefix, lines, funcs)
 	end
 end
 
-function M.validator(schema,handlers)
+---@param schema table
+---@param handlers? { handler: fun(name: string, value: any, error: { [1]: string, [2]: any }) }
+---@return fun(args: any): any
+function M.validator(schema, handlers)
 	-- print(yaml.encode(schema))
 	local prefix = 'args'
 	local lines = {
 		[[
 		local _currkey,_currval,_currcast
-		-- print("xpcall to validator function")
 		local function _typename(value)
 			return type(value) ~= 'cdata' and type(value) or tostring(require"ffi".typeof(value))
 		end
 		local function _err_handler(err) -- catch of xpcall
-			-- print("in xpcall error",yaml.encode(err), _currkey, _currval)
 			if type(err) == 'table' and err[1] then
 				if handlers.handler then
 					local _,he = pcall(handlers.handler,_currkey, _currval, err)
@@ -240,7 +252,7 @@ function M.validator(schema,handlers)
 				else
 					return string.format("%s is %s with value %s",
 						_currkey,err[1],tostring(_currval))
-					
+
 				end
 			else
 				if handlers.handler then
@@ -258,19 +270,19 @@ function M.validator(schema,handlers)
 	lines.top = {}
 	local funcs = {}
 	handlers = handlers or {}
-	validator(schema, prefix, lines, funcs)
+	build_validator(schema, prefix, lines, funcs, handlers)
 	table.insert(lines,"return "..prefix.." end")
-	table.insert(lines, "return function("..prefix..[[)
+	table.insert(lines, [[return function(args)
 		local r,e = xpcall(_main_checker, _err_handler,args)
 		-- print("xpcall return = ",r,yaml.encode(e))
 		if not r then error(e,2) end
 		return args
 	end ]])
-	for k,v in pairs(lines.top) do
+	for _,v in pairs(lines.top) do
 		table.insert(lines,1,v)
 	end
 	lines.top = nil
-	
+
 	local source =
 	[[
 		-- print("call to loaded: ",...)
@@ -278,23 +290,18 @@ function M.validator(schema,handlers)
 	]]
 	..
 	table.concat(lines,"\n")
-	
-	-- handlers.handler = handlers.handler or function(key,value,reason,...)
-	-- 	-- if reason == 'invalid'
-	-- 	-- '%s required to be of type %s'
-	-- end
-	
-	-- print(source) os.exit()
-	
+
+	-- print(source)
 	local loaded, err = loadstring(source)
 	if not loaded then error(err) end
 	local f = loaded(handlers, funcs)
-	-- print(source, f)
 	return f
 end
 
 M.idator = M.validator
 
+---@param required boolean
+---@param ... string|fun(value: any, name: string): any
 local function required_optional( required, ... )
 	local has_func = false
 	local argc = select('#',...)
@@ -304,7 +311,7 @@ local function required_optional( required, ... )
 			break
 		end
 	end
-	if argc == 1 and not has_func then
+	if argc == 1 and not has_func and type(...) == 'string' then
 		local check = ...
 		if check:match('^[+?]') then
 			-- check:match('^%+') xor required
@@ -330,6 +337,17 @@ function M.optional(...)
 end
 M.opt   = M.optional
 M.maybe = M.optional
+
+function M.list_item(...)
+	local n = select('#', ...)
+	if n ~= 1 then
+		error("val.list_item expects only 1 argument", 2)
+	end
+	local schema = ...
+	return setmetatable({schema}, COM_MULTICAST_MT)
+end
+
+M.item = M.list_item
 
 -- lua's tonumber can take optional second parameter
 -- so it does not work with our functions taking (value, key) as arguments

@@ -36,6 +36,7 @@ local function summary()
 	if failed > 0 then
 		print(string.format("# Looks like you failed %d test of %d.",failed,testno))
 	end
+	os.exit(failed)
 end
 
 local function v_test_ok(validator, struct, name)
@@ -91,7 +92,7 @@ for _,cons in pairs({
 	{true,  "required "},
 	{true,  {"req"}},
 	{true,  {"required"}},
-		
+
 	{false, "?"},
 	{false, "opt "},
 	{false, "optional "},
@@ -111,6 +112,7 @@ for _,cons in pairs({
 		{ "ctype<uint64_t>", { 1ULL },                            { "",1, 1LL, {}, function() end } },
 		{ "ctype<int64_t>",  { 1LL },                             { "",1, 1ULL, {}, function() end } },
 	}) do
+		---@type string, any[], any[]
 		local typename, positive, negative = unpack(test)
 		local constraint;
 		local constraint_name;
@@ -126,12 +128,12 @@ for _,cons in pairs({
 			else
 				error("GTFO")
 			end
-			
+
 		else
 		 	constraint = typecheck..typename
 		 	constraint_name = constraint
 		end
-		
+
 		for _,is_nested in pairs({true,false}) do
 			local positives = {}
 			local negatives = {}
@@ -153,7 +155,7 @@ for _,cons in pairs({
 				n_cons_name = "common "..constraint_name
 			end
 			local vv = val({ test = n_cons });
-		
+
 			for _,value in pairs(positives) do
 				local real_value
 				if is_nested then
@@ -167,7 +169,7 @@ for _,cons in pairs({
 					"constraint '"..n_cons_name.."' positive with '"..tostring(real_value).."'"
 				)
 			end
-			
+
 			if required then
 				v_test_not_ok(
 					vv,
@@ -182,7 +184,7 @@ for _,cons in pairs({
 					"constraint '"..n_cons_name.."' positive missing"
 				)
 			end
-			
+
 			for _,value in pairs(negatives) do
 				local real_value
 				if is_nested then
@@ -494,5 +496,3 @@ if not r then
 end
 
 summary()
-
-do return end
